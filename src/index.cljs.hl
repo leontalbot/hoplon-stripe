@@ -1,0 +1,8 @@
+(page "index.html"
+      (:require [cljsjs.stripe]))
+
+(html
+  (head
+    (link :href "app.css" :rel "stylesheet"))
+  (body
+    (h1 "Hello, Hoplon!")))

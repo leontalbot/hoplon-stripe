@@ -1,7 +1,7 @@
 (set-env!
   :dependencies '[[adzerk/boot-cljs          "1.7.228-1"]
                   [adzerk/boot-reload        "0.4.7"]
-                  [cljsjs/stripe "2.0-0"]
+                  [cljsjs/stripe "2.0-1"]
                   [hoplon/boot-hoplon        "0.1.13"]
                   [hoplon/hoplon             "6.0.0-alpha14"]
                   [org.clojure/clojure       "1.7.0"]

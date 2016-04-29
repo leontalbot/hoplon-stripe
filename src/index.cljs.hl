@@ -1,8 +1,189 @@
 (page "index.html"
-      (:require [cljsjs.stripe]))
+      (:require
+       [clojure.set :as set :refer [rename-keys]]))
+
+;; No need to require [cljsjs.stripe]
+;; stripe.cljsjs package only provides an extern file required for advanced
+;; compilation. The Stripe js API will still need to be provided through
+;; some other mechanism.
+
+
+;;; Static data
+
+(def stripe-pk "pk_test_kkkkkkkkkkkkkkkkkkkkkkkk")
+
+(def stripe-url "https://js.stripe.com/v2/")
+(def key-mappings {:postal-code  :address_zip
+                   :card-number  :number
+                   :cvv          :cvc
+                   :exp-month    :exp_month
+                   :exp-year     :exp_year})
+
+(def months ["mm" "01" "02" "03" "04" "05" "06" "07" "08" "09" "10" "11" "12"])
+(def years ["yyyy" "2016" "2017" "2018" "2019" "2020" "2021" "2022"])
+(def qty ["1" "2" "3" "4" "5" "6"])
+
+;;; CELLS
+
+;; First step data, to be sent to stripe
+(defc form-data
+  {:name nil
+   :qty nil
+   :email nil
+   :postal-code nil
+   :card-number nil
+   :cvv nil
+   :exp-month nil
+   :exp-year nil
+   :amount nil})
+
+;; Second step data, when the payment accepted, to be sent to app server
+(defc order-data nil)
+
+;; Other state cells
+(defc error-message nil)
+(defc form-data-ok? nil)
+
+(defc payment-success? nil)
+(defc stripe-ready? nil)
+
+
+;;; HANDLERS
+
+;; Cells handlers
+
+(defn path-cell [c path]
+  (cell= (get-in c path) (partial swap! c assoc-in path)))
+
+
+(defn handle-stripe-response [form-data status response]
+  (let [r (js->clj response :keywordize-keys true)]
+    (if (= status 200)
+      (do (swap! form-data assoc :token r)
+          (reset! form-data-ok? true)
+          #_"FIXME send to server with cljs/http"
+          #_"FIXME change view")
+      (reset! error-message (-> r :error :message) {}))))
+
+
+(defn get-stripe-token [form-data]
+  (let [data (rename-keys @form-data key-mappings)]
+    (.createToken (.-card js/Stripe) (clj->js data)
+                  (partial handle-stripe-response form-data))))
+
+(defn send-form [form-data]
+  (get-stripe-token form-data))
+
+
+
+
+;;; VIEWS
+
+;; Elements
+
+(defn jq-target-val [e]
+  (->> e .-target js/jQuery .val))
+
+
+(defelem input-field [{:keys [cell type] :as attrs}]
+  (let [a {:value cell
+           :keyup (fn [e] (->> e jq-target-val (reset! cell)))}]
+    (input a)))
+
+(defelem select-field [{:keys [items cell] :as attrs} _]
+  (select (dissoc attrs :period)
+          :change #(reset! cell (jq-target-val %))
+          :value cell
+          (loop-tpl :bindings [item items]
+                    (option item))))
+
+
+(defelem date-field [{:keys [period cell] :as attrs} _]
+  (let [period-list (case period
+                      "month" ["mm" "01" "02" "03" "04" "05" "06" "07" "08" "09" "10" "11" "12"]
+                      "year" ["yyyy" "2016" "2017" "2018" "2019" "2020" "2021" "2022"])]
+    (select (dissoc attrs :period)
+            :change #(reset! cell (jq-target-val %))
+            :value cell
+            (loop-tpl :bindings [item period-list]
+                      (option item)))))
+
+
+
+(defn view-success [] (div "Bravo!"))
+
+(defn view-error [message] (div (str "oups " message)))
+
+(defn payment-form []
+  (div {:id "payment-form"
+        ;; :css (when-not stripe-ready? {:display "none"})
+        }
+       (div
+        (label "Quantity (20$ each.)")
+        (select-field {:items qty
+                           :cell (path-cell form-data [:qty])})
+
+            (span " = ")
+            (span "20$"))
+       (div {:class "form-row"}
+            (label "Name")
+            (input-field {:cell (path-cell form-data [:name])}))
+       (div {:class "form-row"}
+            (label "Email")
+            (input-field {:cell (path-cell form-data [:email])}))
+       (div {:class "form-row"}
+            (label "Postal Code")
+            (input-field {:cell (path-cell form-data [:postal-code])}))
+        (div {:class "form-row"}
+             (label "Card Number")
+             (input-field {:cell (path-cell form-data [:card-number])}))
+        (small "Test success with: 4242424242424242 or 5555555555554444")
+        (small "Test card decline with: 4000000000000002")
+        (small "Test incorrect number with: 4242424242424241")
+
+        (div {:class "form-row"}
+             (label "CVV")
+             (input-field {:cell (path-cell form-data [:cvv])}))
+        (div {:class "form-row"}
+             (label "Expiration")
+             (div {:class "expiry-wrapper"}
+                  (select-field {:class "card-expiry-month stripe-sensitive required"
+                                 :items months
+                                 :cell (path-cell form-data [:exp-month])})
+
+                  (span " / ")
+                  (select-field {:class "card-expiry-year stripe-sensitive required"
+                                 :items years
+                                 :cell (path-cell form-data [:exp-year])})))
+        (button {:click #(send-form form-data)} "Submit")
+        (p (text "Data sent to server?: ~{(or form-data-ok? \"nothing sent\")}"))
+        (p (text "Error-message: ~{(or error-message \"none\")}"))))
+
+;;; RENDER
+
+;; JS
+
+(defn stripe-init! [pk]
+  (do
+    (.setPublishableKey js/Stripe pk)
+    (reset! stripe-ready? true)))
+
+(defn ensure-stripe []
+  (.getScript js/jQuery stripe-url #(stripe-init! stripe-pk)))
+
+
+(with-init! (ensure-stripe))
+
+
+;; HTML
 
 (html
-  (head
-    (link :href "app.css" :rel "stylesheet"))
-  (body
-    (h1 "Hello, Hoplon!")))
+ (head
+  (title "Stripe with Hoplon")
+  (link :href "app.css" :rel "stylesheet"))
+ (body
+  (h1 "Stripe Example Form, with... Hoplon!")
+  (text "Form data: ~{form-data}")
+  (payment-form)
+  (noscript
+   (p "JavaScript is required for the registration form."))))

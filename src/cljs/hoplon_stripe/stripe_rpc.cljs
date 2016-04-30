@@ -78,5 +78,3 @@
       (reset-all! [success-message process-message error-message] nil)
       (.createToken (.-card js/Stripe) (clj->js norm-data)
                     (partial handle-stripe-js-response form-data token-data)))))
-
-;;; Watch cells

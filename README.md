@@ -1,6 +1,8 @@
 # hoplon-stripe
 
-A [Hoplon][3] project designed to...well, that part is up to you.
+A minimal [Hoplon][4] project with [Castra][2] that shows a [Stripe][8] integration for both front-end and back-end.
+
+You can now learn how to accept payments with Hoplon! Enjoy! 
 
 ## Dependencies
 
@@ -8,6 +10,7 @@ A [Hoplon][3] project designed to...well, that part is up to you.
 - [boot][1]
 
 ## Usage
+First off, grab your stripe test keys. Put `sk_test_...` in `clj/hoplon-stripe/stripe.clj` and `pk_test_...` in `cljs/hoplon_stripe/stripe_rpc.cljs`
 ### Development
 1. Start the `dev` task. In a terminal run:
     ```bash
@@ -19,24 +22,39 @@ A [Hoplon][3] project designed to...well, that part is up to you.
     - auto reload the html page on changes
     - Clojurescript REPL
 
-2. Go to [http://localhost:8000][2] in your browser. You should see "Hello, Hoplon!".
+2. Go to [http://localhost:8000][3] in your browser. You should see "Hello,
+Hoplon and Castra!" with random numbers that are generated on the server and
+transmited to the client. But you should change that to what you want.
 
 3. If you edit and save a file, the task will recompile the code and reload the
    browser to show the updated version.
 
-### Production
+.### Production
 1. Run the `prod` task. In a terminal run:
     ```bash
     $ boot prod
     ```
-
 2. The compiled files will be on the `target/` directory. This will use
    advanced compilation and prerender the html.
 
+### Deployment
+
+You can easily deploy this application for free to [Heroku][5].
+
+1. Get a Heroku account and install the [Heroku toolbelt][6]
+1. Create an application in the Heroku dashboard
+1. Build a WAR file with `boot make-war`
+1. Follow [these instructions][7] to deploy the WAR to Heroku using the `heroku` tool.
+
 ## License
 
-Copyright © 2016, **Your Name Goes Here**
+Copyright © 2016, **Leon Talbot**
 
 [1]: http://boot-clj.com
-[2]: http://localhost:8000
-[3]: http://hoplon.io
+[2]: https://github.com/hoplon/castra
+[3]: http://localhost:8000
+[4]: https://hoplon.io
+[5]: https://www.heroku.com/
+[6]: https://toolbelt.heroku.com/
+[7]: https://devcenter.heroku.com/articles/war-deployment#deployment-with-the-heroku-toolbelt
+[8]: https://stripe.com

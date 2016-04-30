@@ -1,6 +1,6 @@
 (page "index.html"
-      (:require
-       [clojure.set :as set :refer [rename-keys]]))
+  (:require
+   [hoplon-stripe.stripe-rpc :as stripe]))
 
 ;; No need to require [cljsjs.stripe]
 ;; stripe.cljsjs package only provides an extern file required for advanced
@@ -8,44 +8,39 @@
 ;; some other mechanism.
 
 
-;;; Static data
-
-(def stripe-pk "pk_test_kkkkkkkkkkkkkkkkkkkkkkkk")
-
-(def stripe-url "https://js.stripe.com/v2/")
-(def key-mappings {:postal-code  :address_zip
-                   :card-number  :number
-                   :cvv          :cvc
-                   :exp-month    :exp_month
-                   :exp-year     :exp_year})
-
 (def months ["mm" "01" "02" "03" "04" "05" "06" "07" "08" "09" "10" "11" "12"])
 (def years ["yyyy" "2016" "2017" "2018" "2019" "2020" "2021" "2022"])
 (def qty ["1" "2" "3" "4" "5" "6"])
 
 ;;; CELLS
 
+;; Messages
+
+
 ;; First step data, to be sent to stripe
 (defc form-data
   {:name nil
-   :qty nil
    :email nil
    :postal-code nil
    :card-number nil
+   :country "CA"
    :cvv nil
    :exp-month nil
    :exp-year nil
-   :amount nil})
+   :qty 1
+   :amount 2000})
+
+(def key-mappings {:postal-code  :address_zip
+                   :country      :address_country
+                   :card-number  :number
+                   :cvv          :cvc
+                   :exp-month    :exp_month
+                   :exp-year     :exp_year})
+
 
 ;; Second step data, when the payment accepted, to be sent to app server
-(defc order-data nil)
+(defc token-data nil)
 
-;; Other state cells
-(defc error-message nil)
-(defc form-data-ok? nil)
-
-(defc payment-success? nil)
-(defc stripe-ready? nil)
 
 
 ;;; HANDLERS
@@ -56,25 +51,8 @@
   (cell= (get-in c path) (partial swap! c assoc-in path)))
 
 
-(defn handle-stripe-response [form-data status response]
-  (let [r (js->clj response :keywordize-keys true)]
-    (if (= status 200)
-      (do (swap! form-data assoc :token r)
-          (reset! form-data-ok? true)
-          #_"FIXME send to server with cljs/http"
-          #_"FIXME change view")
-      (reset! error-message (-> r :error :message) {}))))
-
-
-(defn get-stripe-token [form-data]
-  (let [data (rename-keys @form-data key-mappings)]
-    (.createToken (.-card js/Stripe) (clj->js data)
-                  (partial handle-stripe-response form-data))))
-
-(defn send-form [form-data]
-  (get-stripe-token form-data))
-
-
+(defn send-form [form-data token-data key-mappings]
+  (stripe/get-stripe-token form-data token-data key-mappings))
 
 
 ;;; VIEWS
@@ -98,33 +76,10 @@
                     (option item))))
 
 
-(defelem date-field [{:keys [period cell] :as attrs} _]
-  (let [period-list (case period
-                      "month" ["mm" "01" "02" "03" "04" "05" "06" "07" "08" "09" "10" "11" "12"]
-                      "year" ["yyyy" "2016" "2017" "2018" "2019" "2020" "2021" "2022"])]
-    (select (dissoc attrs :period)
-            :change #(reset! cell (jq-target-val %))
-            :value cell
-            (loop-tpl :bindings [item period-list]
-                      (option item)))))
-
-
-
-(defn view-success [] (div "Bravo!"))
-
-(defn view-error [message] (div (str "oups " message)))
-
 (defn payment-form []
-  (div {:id "payment-form"
-        ;; :css (when-not stripe-ready? {:display "none"})
-        }
+  (div {:id "payment-form"}
        (div
-        (label "Quantity (20$ each.)")
-        (select-field {:items qty
-                           :cell (path-cell form-data [:qty])})
-
-            (span " = ")
-            (span "20$"))
+        (label (text "Total : ~{(/ (:amount form-data) 100)}.00$")))
        (div {:class "form-row"}
             (label "Name")
             (input-field {:cell (path-cell form-data [:name])}))
@@ -155,22 +110,25 @@
                   (select-field {:class "card-expiry-year stripe-sensitive required"
                                  :items years
                                  :cell (path-cell form-data [:exp-year])})))
-        (button {:click #(send-form form-data)} "Submit")
-        (p (text "Data sent to server?: ~{(or form-data-ok? \"nothing sent\")}"))
-        (p (text "Error-message: ~{(or error-message \"none\")}"))))
+        (button {:click #(send-form form-data token-data key-mappings)} "Submit")
+        (p :toggle stripe/success-message
+           :css {:color "green"}
+           (text "Success! ~{stripe/success-message}"))
+        (p :toggle stripe/process-message
+           :css {:color "#333"}
+           (text "Processing... ~{stripe/process-message}"))
+        (p :toggle stripe/error-message
+           :css {:color "red"}
+           (text "Oups! ~{stripe/error-message}"))))
 
 ;;; RENDER
 
 ;; JS
 
-(defn stripe-init! [pk]
-  (do
-    (.setPublishableKey js/Stripe pk)
-    (reset! stripe-ready? true)))
+(defn stripe-init! [pk] (.setPublishableKey js/Stripe pk))
 
 (defn ensure-stripe []
-  (.getScript js/jQuery stripe-url #(stripe-init! stripe-pk)))
-
+  (.getScript js/jQuery stripe/stripe-url #(stripe-init! stripe/stripe-pk)))
 
 (with-init! (ensure-stripe))
 
@@ -180,10 +138,28 @@
 (html
  (head
   (title "Stripe with Hoplon")
-  (link :href "app.css" :rel "stylesheet"))
+  (link :href "app.css" :rel "stylesheet")
+  (link :href "https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css"
+        :rel "stylesheet"))
  (body
-  (h1 "Stripe Example Form, with... Hoplon!")
-  (text "Form data: ~{form-data}")
-  (payment-form)
+  (div :class "container"
+       (div :class "row"
+            (div :class "col-xs-12"
+                 (h1 "Stripe Example Form, with... Hoplon and Castra!"))))
+
+  (div :class "row"
+       (div :class "col-xs-12"
+            (payment-form)))
+
+  (div :class "row"
+       (div :class "col-xs-12"
+            (h3 "STATE :")
+            (p :toggle form-data
+               (text "Form data: ~{form-data}"))
+            (p :toggle token-data
+               (text "Token data: ~{token-data}"))
+            (p :toggle stripe/order-data
+               (text "Order data: ~{stripe/order-data}"))))
+
   (noscript
    (p "JavaScript is required for the registration form."))))

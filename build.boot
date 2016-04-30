@@ -1,7 +1,6 @@
 (set-env!
   :dependencies '[[adzerk/boot-cljs           "1.7.228-1"]
                   [adzerk/boot-reload         "0.4.7"]
-                  [ring/ring-codec            "1.0.0"]
                   [clj-http                   "2.1.0"]
                   [cljsjs/stripe              "2.0-1"]
                   [compojure                  "1.5.0"]
